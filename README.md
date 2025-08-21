@@ -1,2 +1,0 @@
-# munisvm.github.io
-Municipalidad
