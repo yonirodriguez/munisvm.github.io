@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Ranking con Login • Persistencia Robusta</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{
+      --bg:#f5f7fb; --card:#fff; --text:#1f2937; --muted:#6b7280; --primary:#2563eb; --primary-600:#1d4ed8;
+      --danger:#dc2626; --shadow:0 6px 20px rgba(0,0,0,.08); --radius:16px; --warn:#ca8a04;
+    }
+    *{box-sizing:border-box}
+    body{font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;background:var(--bg);color:var(--text);margin:0;padding:24px}
+    .wrap{max-width:1100px;margin:0 auto}
+    h1{margin:0 0 16px;font-size:28px;display:flex;gap:10px;align-items:center}
+    .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:10px;flex-wrap:wrap}
+    .badge{font-size:12px;padding:6px 10px;border-radius:999px;background:#eef2ff;color:#3730a3}
+    .card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px}
+    .actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .actions input[type="text"]{padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;min-width:240px}
+    .btn{border:0;border-radius:10px;padding:10px 14px;background:var(--primary);color:#fff;cursor:pointer}
+    .btn:hover{background:var(--primary-600)}
+    .btn-outline{background:#fff;color:var(--primary);border:1px solid var(--primary)}
+    .btn-danger{background:var(--danger)}
+    .btn-muted{background:#e5e7eb;color:#111827}
+    .btn-ghost{background:transparent;border:1px dashed #cbd5e1;color:#111827}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    th,td{padding:12px;border-bottom:1px solid #f0f0f0;text-align:center}
+    th{color:#111827;background:#f9fafb;position:sticky;top:0;z-index:1}
+    .icon{font-size:22px}
+    .sumar{display:flex;gap:8px;justify-content:center}
+    .sumar input[type="number"]{width:110px;padding:8px 10px;border:1px solid #e5e7eb;border-radius:10px}
+    .muted{color:var(--muted);font-size:13px}
+    .hidden{display:none !important}
+    .footer{margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+    .pill{padding:6px 10px;background:#f3f4f6;border-radius:999px;font-size:12px}
+    .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+    .empty{padding:18px;border:1px dashed #e5e7eb;border-radius:12px;text-align:center;color:var(--muted);margin-top:10px}
+    .inline-edit{padding:6px 8px;border:1px solid #e5e7eb;border-radius:10px;width:100%}
+    select, input[type="file"]{padding:8px;border:1px solid #e5e7eb;border-radius:10px}
+    .banner{margin-bottom:12px;padding:12px;border-radius:10px;background:#fef3c7;color:#7c2d12;border:1px solid #fde68a;display:none}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div id="warnBanner" class="banner">⚠️ No se pudo acceder al almacenamiento del navegador. Los cambios no se guardarán automáticamente. Usá <b>Guardar JSON</b> para descargar y <b>Cargar JSON</b> para restaurar.</div>
+
+  <div class="topbar">
+    <h1>🏆 Ranking de Jugadores</h1>
+    <div class="actions">
+      <span id="roleBadge" class="badge">Modo visitante</span>
+      <button id="loginBtn" class="btn btn-outline">Iniciar sesión</button>
+      <button id="logoutBtn" class="btn btn-danger hidden">Cerrar sesión</button>
+    </div>
+  </div>
+
+  <!-- Panel de admin -->
+  <div id="adminPanel" class="card hidden">
+    <strong>Panel de administrador</strong>
+    <div class="actions" style="margin-top:10px">
+      <input type="text" id="nuevoJugador" placeholder="Nombre del jugador" />
+      <button class="btn" id="agregarBtn">Agregar jugador</button>
+    </div>
+    <div class="toolbar">
+      <button class="btn" id="exportBtn" title="Exportar CSV">Exportar CSV</button>
+      <label class="btn btn-outline" for="importFile">Importar CSV</label><input id="importFile" type="file" accept=".csv" class="hidden">
+      <button class="btn btn-outline" id="saveJsonBtn">Guardar JSON</button>
+      <label class="btn btn-outline" for="loadJsonFile">Cargar JSON</label><input id="loadJsonFile" type="file" accept=".json" class="hidden">
+      <button class="btn-danger" id="resetBtn" title="Borrar todo">Resetear ranking</button>
+    </div>
+    <div class="muted">Guardado automático cuando el navegador permite almacenamiento. Si no, usá Guardar/Cargar JSON.</div>
+  </div>
+
+  <!-- Tabla -->
+  <div class="card" style="margin-top:16px">
+    <div class="muted">Los 1° y 2° 🥇 · 3° y 4° 🥈 · </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Posición</th>
+          <th>Jugador</th>
+          <th>Puntos</th>
+          <th id="thAccion" class="hidden">Sumar puntos (0–100)</th>
+          <th>Copa</th>
+        </tr>
+      </thead>
+      <tbody id="rankingBody"></tbody>
+    </table>
+    <div id="emptyState" class="empty hidden">No hay jugadores cargados.</div>
+    <div class="footer">
+      <div class="pill" id="totalJugadores">—</div>
+      <div class="muted">Persistencia: <span id="persistStatus">verificando…</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal de Login -->
+<div id="loginModal" class="modal hidden" aria-hidden="true">
+  <div class="card" style="max-width:420px;margin:auto">
+    <h3>Ingresar como administrador</h3>
+    <div class="actions" style="margin-top:8px">
+      <input id="passInput" type="password" placeholder="Contraseña" />
+      <button id="doLogin" class="btn">Entrar</button>
+      <button id="closeModal" class="btn btn-muted">Cancelar</button>
+    </div>
+    <div class="muted">Solo el administrador puede agregar jugadores o editar puntos.</div>
+  </div>
+</div>
+
+<script>
+/* =================== Configuración =================== */
+const ADMIN_PASSWORD = 'Er33905j.'; // <-- CAMBIÁ ESTO
+const LS_KEYS = { jugadores: 'ranking_jugadores_v3', admin: 'ranking_is_admin_v3' };
+
+/* =================== Almacenamiento seguro =================== */
+let storageOK = true;
+function storageAvailable(){
+  try{
+    const x = '__probe__' + Math.random();
+    localStorage.setItem(x, x);
+    const y = localStorage.getItem(x) === x;
+    localStorage.removeItem(x);
+    return y;
+  }catch(e){ return false; }
+}
+function saveState(key, data){
+  if (!storageOK) return false;
+  try{
+    localStorage.setItem(key, JSON.stringify(data));
+    return true;
+  }catch(e){ return false; }
+}
+function loadState(key){
+  if (!storageOK) return null;
+  try{ const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : null; }
+  catch(e){ return null; }
+}
+
+/* =================== Estado =================== */
+storageOK = storageAvailable();
+document.getElementById('persistStatus').textContent = storageOK ? 'Activada (localStorage)' : 'Deshabilitada';
+document.getElementById('warnBanner').style.display = storageOK ? 'none' : 'block';
+
+let jugadores = loadState(LS_KEYS.jugadores) || { Juan: 0, Ana: 0, Carlos: 0, Lucía: 0 };
+let isAdmin = !!(loadState(LS_KEYS.admin));
+
+/* =================== Utilidades =================== */
+function guardarJugadores(){
+  const ok = saveState(LS_KEYS.jugadores, jugadores);
+  if (!ok) console.warn('No se pudo guardar en localStorage.');
+}
+function setAdmin(flag){
+  isAdmin = !!flag;
+  saveState(LS_KEYS.admin, isAdmin);
+  renderUI();
+}
+function ordenarJugadores(){ return Object.entries(jugadores).sort((a,b)=>b[1]-a[1]); }
+function copaPorIndex(i){ if (i<=1) return '🥇'; if (i<=3) return '🥈'; return ''; }
+function cssId(txt){ return String(txt).replace(/\s+/g,'_').replace(/[^\w\-]/g,''); }
+
+/* =================== Render =================== */
+function renderTabla(){
+  const tbody = document.getElementById('rankingBody');
+  const thAccion = document.getElementById('thAccion');
+  const empty = document.getElementById('emptyState');
+  const total = document.getElementById('totalJugadores');
+  tbody.innerHTML = '';
+  const ordenados = ordenarJugadores();
+  empty.classList.toggle('hidden', ordenados.length !== 0);
+  total.textContent = `${ordenados.length} jugador${ordenados.length===1?'':'es'}`;
+  thAccion.classList.toggle('hidden', !isAdmin);
+
+  ordenados.forEach(([nombre, puntos], index)=>{
+    const tr = document.createElement('tr');
+
+    const tdPos = document.createElement('td'); tdPos.textContent = index+1;
+    const tdNom = document.createElement('td'); tdNom.textContent = nombre;
+    const tdPts = document.createElement('td'); tdPts.textContent = puntos;
+
+    if (isAdmin){
+      tdNom.ondblclick = () => editarCelda(tdNom, nombre, 'nombre');
+      tdPts.ondblclick = () => editarCelda(tdPts, nombre, 'puntos');
+    }
+
+    const tdAcc = document.createElement('td');
+    if (isAdmin){
+      const box = document.createElement('div'); box.className = 'sumar';
+      const input = document.createElement('input'); input.type='number'; input.min=0; input.max=100; input.placeholder='0–100';
+      const btn = document.createElement('button'); btn.className='btn'; btn.textContent='Sumar';
+      btn.onclick = ()=>{ sumarPuntos(nombre, parseInt(input.value,10)); input.value=''; };
+      box.appendChild(input); box.appendChild(btn); tdAcc.appendChild(box);
+    } else tdAcc.className='hidden';
+
+    const tdCopa = document.createElement('td'); tdCopa.className='icon'; tdCopa.textContent = copaPorIndex(index);
+
+    tr.appendChild(tdPos); tr.appendChild(tdNom); tr.appendChild(tdPts); tr.appendChild(tdAcc); tr.appendChild(tdCopa);
+    tbody.appendChild(tr);
+  });
+}
+function renderUI(){
+  document.getElementById('adminPanel').classList.toggle('hidden', !isAdmin);
+  document.getElementById('logoutBtn').classList.toggle('hidden', !isAdmin);
+  document.getElementById('loginBtn').classList.toggle('hidden', isAdmin);
+  document.getElementById('roleBadge').textContent = isAdmin ? 'Administrador' : 'Modo visitante';
+  renderTabla();
+}
+
+/* =================== Edición inline =================== */
+function editarCelda(td, nombreOriginal, tipo){
+  const valorInicial = td.textContent;
+  td.innerHTML = '';
+  const input = document.createElement('input'); input.className='inline-edit'; input.value=valorInicial;
+  td.appendChild(input); input.focus(); input.select();
+  const commit = () => {
+    let v = input.value.trim();
+    if (tipo==='nombre'){
+      if (!v){ td.textContent = valorInicial; return; }
+      if (jugadores[v] !== undefined && v !== nombreOriginal){ alert('Ya existe ese nombre.'); td.textContent = valorInicial; return; }
+      jugadores[v] = jugadores[nombreOriginal]; if (v !== nombreOriginal) delete jugadores[nombreOriginal];
+    } else {
+      const n = parseInt(v, 10); if (Number.isNaN(n) || n < 0){ alert('Puntos inválidos.'); td.textContent = valorInicial; return; }
+      jugadores[nombreOriginal] = n;
+    }
+    guardarJugadores(); renderTabla();
+  };
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', e=>{ if (e.key==='Enter') commit(); if (e.key==='Escape') td.textContent=valorInicial; });
+}
+
+/* =================== Acciones =================== */
+function agregarJugador(){
+  const input = document.getElementById('nuevoJugador');
+  const nombre = (input.value||'').trim();
+  if (!nombre){ alert('Ingresá un nombre.'); return; }
+  if (jugadores[nombre] !== undefined){ alert('Ese nombre ya existe.'); return; }
+  jugadores[nombre] = 0;
+  input.value = '';
+  guardarJugadores(); renderTabla();
+}
+function sumarPuntos(nombre, val){
+  if (Number.isNaN(val) || val<0 || val>100){ alert('Ingresá un número entre 0 y 100.'); return; }
+  jugadores[nombre] = (jugadores[nombre]||0) + val;
+  guardarJugadores(); renderTabla();
+}
+function exportarCSV(){
+  const rows = ordenarJugadores(); if (rows.length===0){ alert('No hay datos.'); return; }
+  let csv = 'Posicion,Jugador,Puntos,Copa\n';
+  rows.forEach(([n,p],i)=>{ csv += `${i+1},"${n.replace(/"/g,'""')}",${p},"${copaPorIndex(i)}"\n`; });
+  descargarArchivo(csv, `ranking_export_${fechaIso()}.csv`, 'text/csv;charset=utf-8;');
+}
+function guardarJSON(){
+  const payload = { version:1, jugadores };
+  descargarArchivo(JSON.stringify(payload, null, 2), `ranking_backup_${fechaIso()}.json`, 'application/json');
+}
+function cargarJSON(file){
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const data = JSON.parse(reader.result);
+      if (!data || !data.jugadores || typeof data.jugadores !== 'object') throw new Error('Formato inválido');
+      jugadores = data.jugadores;
+      guardarJugadores(); renderTabla(); alert('Backup restaurado.');
+    }catch(e){ alert('JSON inválido.'); }
+  };
+  reader.readAsText(file, 'utf-8');
+}
+function importarCSV(file){
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    const text = reader.result;
+    const lines = text.split(/\r?\n/).filter(l=>l.trim().length>0);
+    if (lines.length===0){ alert('CSV vacío.'); return; }
+    const header = lines.shift().split(',').map(h=>h.trim().toLowerCase());
+    const iNom = header.findIndex(h=>['jugador','nombre'].includes(h));
+    const iPts = header.findIndex(h=>['puntos','puntaje','score'].includes(h));
+    if (iNom===-1 || iPts===-1){ alert('CSV inválido. Requiere columnas Jugador/Nombre y Puntos/Puntaje/Score.'); return; }
+    const acc = {};
+    for(const line of lines){
+      const cols = parseCSVLine(line); if (!cols) continue;
+      const nom = (cols[iNom]||'').trim(); const pts = parseInt((cols[iPts]||'').trim(),10);
+      if (!nom || Number.isNaN(pts)) continue;
+      acc[nom] = (acc[nom]||0) + pts;
+    }
+    Object.entries(acc).forEach(([nom, add])=>{ jugadores[nom] = (jugadores[nom]||0) + add; });
+    guardarJugadores(); renderTabla(); alert('Importación completada.');
+  };
+  reader.readAsText(file, 'utf-8');
+}
+
+/* =================== Helpers =================== */
+function parseCSVLine(line){
+  const res=[]; let cur=''; let inQ=false;
+  for(let i=0;i<line.length;i++){
+    const ch=line[i];
+    if(inQ){ if(ch=='"'){ if(line[i+1]=='"'){cur+='"';i++;} else inQ=false; } else cur+=ch; }
+    else { if(ch===','){ res.push(cur); cur=''; } else if(ch=='"'){ inQ=true; } else cur+=ch; }
+  }
+  res.push(cur); return res;
+}
+function fechaIso(){ return new Date().toISOString().slice(0,19).replace(/[:T]/g,'-'); }
+function descargarArchivo(contenido, nombre, mime){
+  const blob = new Blob([contenido], {type:mime});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=nombre; document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+/* =================== Login =================== */
+const loginModal = document.getElementById('loginModal');
+document.getElementById('loginBtn').onclick = () => { document.getElementById('passInput').value=''; loginModal.classList.remove('hidden'); };
+document.getElementById('closeModal').onclick = () => { loginModal.classList.add('hidden'); };
+document.getElementById('logoutBtn').onclick = () => setAdmin(false);
+document.getElementById('doLogin').onclick = () => {
+  const pass = document.getElementById('passInput').value;
+  if (pass === ADMIN_PASSWORD){ setAdmin(true); loginModal.classList.add('hidden'); }
+  else alert('Contraseña incorrecta.');
+};
+document.getElementById('passInput').addEventListener('keydown', e=>{ if (e.key==='Enter') document.getElementById('doLogin').click(); });
+
+/* =================== Bindings =================== */
+document.getElementById('agregarBtn').onclick = agregarJugador;
+document.getElementById('exportBtn').onclick = exportarCSV;
+document.getElementById('resetBtn').onclick = ()=>{ if(confirm('¿Seguro que querés borrar TODOS los jugadores y puntajes?')){ jugadores={}; guardarJugadores(); renderTabla(); } };
+document.getElementById('importFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) importarCSV(f); e.target.value=''; });
+document.getElementById('saveJsonBtn').onclick = guardarJSON;
+document.getElementById('loadJsonFile').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) cargarJSON(f); e.target.value=''; });
+
+/* =================== Inicio =================== */
+renderUI();
+</script>
+</body>
+</html>
